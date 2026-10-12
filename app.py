@@ -92,16 +92,17 @@ def init_db():
         )
     ''')
     
-    # Seed Initial Default Data if tables are empty
-    cursor.execute('SELECT COUNT(*) FROM users')
+    # Force Reset / Seed Default Users to prevent login issues
+    default_users = [
+        ('doctor_main', '1234', 'Main Branch', 'Doctor', 0, 1, '#007BFF', ''),
+        ('doctor_maadi', '1234', 'Maadi Branch', 'Doctor', 0, 1, '#28A745', ''),
+        ('admin', 'admin123', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', '')
+    ]
+    cursor.executemany('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)', default_users)
+    
+    # Seed Initial Subscriptions if empty
+    cursor.execute('SELECT COUNT(*) FROM subscriptions')
     if cursor.fetchone()[0] == 0:
-        default_users = [
-            ('doctor_main', '1234', 'Main Branch', 'Doctor', 0, 1, '#007BFF', ''),
-            ('doctor_maadi', '1234', 'Maadi Branch', 'Doctor', 0, 1, '#28A745', ''),
-            ('admin', 'admin123', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', '')
-        ]
-        cursor.executemany('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)', default_users)
-        
         default_subs = [
             ('Main Branch', '1 Month', 'Active', str(today + timedelta(days=30))),
             ('Maadi Branch', '3 Months', 'Active', str(today + timedelta(days=90)))
