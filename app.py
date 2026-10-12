@@ -24,7 +24,7 @@ menu = st.sidebar.selectbox("Navigation", [
     "All Appointments (By Date)",
     "Add New Patient / Session",
     "Patient Records & History",
-    "Financial Reports"
+    "Financial Reports & Debts Tracking"
 ])
 
 today = datetime.today().date()
@@ -159,16 +159,46 @@ elif menu == "Patient Records & History":
     else:
         st.info("No patient records available.")
 
-# 6. FINANCIAL REPORTS
-elif menu == "Financial Reports":
-    st.header("💰 Financial Summary & Revenue")
+# 6. FINANCIAL REPORTS & DEBTS TRACKING
+elif menu == "Financial Reports & Debts Tracking":
+    st.header("💰 Financial Summary & Outstanding Balances")
+    
     if not st.session_state['patients'].empty:
         df = st.session_state['patients']
         total_revenue = df['Paid'].sum()
         total_remaining = df['Remaining'].sum()
         
+        # Summary Cards
         col1, col2 = st.columns(2)
-        col1.metric("Total Collected Revenue", f"{total_revenue} EGP")
-        col2.metric("Total Outstanding Balance", f"{total_remaining} EGP")
+        col1.metric("Total Revenue Collected", f"{total_revenue} EGP")
+        col2.metric("Total Unpaid / Outstanding Balance", f"{total_remaining} EGP")
+        
+        st.markdown("---")
+        
+        # Search Specific Patient Balance
+        st.subheader("🔍 Search Patient Debt / Balance")
+        search_name = st.text_input("Enter Patient Name or Phone Number to check balance:")
+        
+        if search_name:
+            filtered_df = df[df['Name'].str.contains(search_name, case=False, na=False) | df['Phone'].str.contains(search_name, na=False)]
+            if not filtered_df.empty:
+                for idx, row in filtered_df.iterrows():
+                    st.write(f"### 👤 Patient: **{row['Name']}** ({row['Phone']}) - {row['Clinic']}")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Total Cost", f"{row['Total_Cost']} EGP")
+                    c2.metric("Paid", f"{row['Paid']} EGP")
+                    c3.metric("Remaining Debt", f"{row['Remaining']} EGP", delta_color="inverse")
+                    st.markdown("---")
+            else:
+                st.warning("No matching patient found.")
+        
+        st.subheader("📋 List of Patients with Remaining Balance (Debts)")
+        debtors_df = df[df['Remaining'] > 0][['Patient_ID', 'Name', 'Phone', 'Clinic', 'Total_Cost', 'Paid', 'Remaining']]
+        
+        if not debtors_df.empty:
+            st.dataframe(debtors_df, use_container_width=True)
+        else:
+            st.success("🎉 Excellent! There are no unpaid balances across all patients.")
+            
     else:
-        st.info("No financial data available yet.")
+        st.info("No financial data or patient records available yet.")
