@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 
 st.set_page_config(page_title="SaaS Multi-Clinic Management System", layout="wide")
 
+today = datetime.today().date()
+
 # Initialize Global Session States
 if 'users' not in st.session_state:
     st.session_state['users'] = pd.DataFrame({
@@ -23,12 +25,13 @@ if 'pricing_plans' not in st.session_state:
         '1 Year': 5000
     }
 
+# Subscriptions Table with automated expiry dates
 if 'subscriptions' not in st.session_state:
     st.session_state['subscriptions'] = pd.DataFrame({
         'Clinic': ['Main Branch', 'Maadi Branch'],
         'Plan': ['1 Month', '3 Months'],
         'Status': ['Active', 'Active'],
-        'Expiry_Date': [str(datetime.today().date() + timedelta(days=30)), str(datetime.today().date() + timedelta(days=90))]
+        'Expiry_Date': [str(today + timedelta(days=30)), str(today + timedelta(days=90))]
     })
 
 if 'patients' not in st.session_state:
@@ -43,7 +46,7 @@ if 'patients' not in st.session_state:
         'Total_Cost': [500.0],
         'Paid': [500.0],
         'Remaining': [0.0],
-        'Date': [str(datetime.today().date())]
+        'Date': [str(today)]
     })
 
 if 'appointments' not in st.session_state:
@@ -51,7 +54,6 @@ if 'appointments' not in st.session_state:
         'Clinic', 'Patient_Name', 'Phone', 'Date', 'Time', 'Procedure'
     ])
 
-# Expenses & Salaries Table (Stored with positive numbers, system handles calculation)
 if 'expenses' not in st.session_state:
     st.session_state['expenses'] = pd.DataFrame(columns=[
         'Clinic', 'Category', 'Description', 'Amount', 'Date', 'Month', 'Year'
@@ -64,7 +66,7 @@ if 'logged_in' not in st.session_state:
     st.session_state['role'] = ""
     st.session_state['staff_finance'] = False
 
-# --- AUTHENTICATION & PORTAL ---
+# --- AUTHENTICATION & AUTOMATED SUBSCRIPTION CHECK ---
 if not st.session_state['logged_in']:
     st.title("🔐 Multi-Clinic SaaS Portal")
     
@@ -82,10 +84,30 @@ if not st.session_state['logged_in']:
                 user_match = users_df[(users_df['Username'] == username_input) & (users_df['Password'] == password_input)]
                 
                 if not user_match.empty:
+                    clinic_name = user_match.iloc[0]['Clinic']
+                    role_val = user_match.iloc[0]['Role']
+                    
+                    # Automated Subscription & Expiry Check (Skip for Super Admin)
+                    if role_val != "Super Admin":
+                        subs_df = st.session_state['subscriptions']
+                        clinic_sub = subs_df[subs_df['Clinic'] == clinic_name]
+                        
+                        if not clinic_sub.empty:
+                            expiry_str = clinic_sub.iloc[0]['Expiry_Date']
+                            expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+                            
+                            if today > expiry_date:
+                                st.error(f"❌ Your subscription for '{clinic_name}' has EXPIRED on {expiry_date}. Please renew your plan to access the system.")
+                                st.stop()
+                        else:
+                            st.warning("⚠️ No active subscription found for this clinic. Please contact support.")
+                            st.stop()
+                    
+                    # If active, allow login
                     st.session_state['logged_in'] = True
                     st.session_state['username'] = user_match.iloc[0]['Username']
-                    st.session_state['clinic'] = user_match.iloc[0]['Clinic']
-                    st.session_state['role'] = user_match.iloc[0]['Role']
+                    st.session_state['clinic'] = clinic_name
+                    st.session_state['role'] = role_val
                     st.session_state['staff_finance'] = user_match.iloc[0]['Staff_Can_View_Finance']
                     st.success("Login successful! Loading dashboard...")
                     st.rerun()
@@ -93,7 +115,7 @@ if not st.session_state['logged_in']:
                     st.error("Invalid username or password.")
                     
     elif auth_mode == "Register New Clinic & Choose Plan":
-        st.subheader("Create a New Account & Select Subscription Plan")
+        st.subheader("Create a New Account & Select Automated Subscription Plan")
         st.info("📦 Available Subscription Plans & Prices (EGP):")
         plans_df = pd.DataFrame(list(st.session_state['pricing_plans'].items()), columns=['Plan Duration', 'Price (EGP)'])
         st.table(plans_df)
@@ -105,7 +127,7 @@ if not st.session_state['logged_in']:
             selected_plan = st.selectbox("Select Subscription Package", list(st.session_state['pricing_plans'].keys()))
             role_choice = st.selectbox("Account Type", ["Doctor (Clinic Owner)", "Staff / Receptionist"])
             
-            reg_btn = st.form_submit_button("Proceed & Register")
+            reg_btn = st.form_submit_button("Register & Activate Automatically")
             
             if reg_btn:
                 if new_username and new_password and new_clinic_name:
@@ -113,8 +135,9 @@ if not st.session_state['logged_in']:
                     if new_username in users_df['Username'].values:
                         st.error("Username already exists.")
                     else:
+                        # Automated Expiry Calculation based on selected plan
                         days_map = {'1 Month': 30, '3 Months': 90, '6 Months': 180, '9 Months': 270, '1 Year': 365}
-                        expiry_date = datetime.today().date() + timedelta(days=days_map[selected_plan])
+                        expiry_date = today + timedelta(days=days_map[selected_plan])
                         
                         new_user_row = pd.DataFrame({
                             'Username': [new_username],
@@ -133,7 +156,7 @@ if not st.session_state['logged_in']:
                             'Expiry_Date': [str(expiry_date)]
                         })
                         st.session_state['subscriptions'] = pd.concat([subs, new_sub_row], ignore_index=True)
-                        st.success(f"Registered successfully! Please log in now.")
+                        st.success(f"🎉 Registered successfully! Package '{selected_plan}' is active until {expiry_date}. You can now login.")
                 else:
                     st.warning("Please fill in all required fields.")
 
@@ -191,8 +214,6 @@ elif "Doctor" in current_role:
     menu_options.append("⚙️ Doctor Settings: Staff Permissions")
 
 menu = st.sidebar.selectbox("Navigation", menu_options)
-
-today = datetime.today().date()
 tomorrow = today + timedelta(days=1)
 
 def filter_by_clinic(df):
@@ -365,7 +386,6 @@ elif menu == "Financial Reports & Debts Tracking":
 elif menu == "📊 Expenses & Monthly/Annual P&L":
     st.header("📊 Clinic Expenses, Salaries & Net Profit Summary")
     
-    # Add Expense Form
     with st.form("expense_form"):
         st.subheader("➕ Record New Expense or Salary")
         col1, col2 = st.columns(2)
@@ -375,7 +395,7 @@ elif menu == "📊 Expenses & Monthly/Annual P&L":
             else:
                 exp_clinic = current_clinic
             exp_category = st.selectbox("Expense Category", ["Staff Salaries", "Clinic Rent", "Medical Supplies & Tools", "Utilities (Water/Electricity)", "Maintenance & Cleaning", "Other Expenses"])
-            exp_desc = st.text_input("Description / Notes (e.g., Nurse Salary, Dental Fillings)")
+            exp_desc = st.text_input("Description / Notes")
         with col2:
             exp_amount = st.number_input("Amount (EGP)", min_value=0.0, step=100.0)
             exp_date = st.date_input("Date", today)
@@ -383,16 +403,14 @@ elif menu == "📊 Expenses & Monthly/Annual P&L":
         save_exp = st.form_submit_button("Save Expense")
         if save_exp and exp_amount > 0:
             exp_month = exp_date.strftime("%Y-%m")
-            exp_year = str(exp_date.year)
-            
             new_exp = pd.DataFrame({
                 'Clinic': [exp_clinic],
                 'Category': [exp_category],
                 'Description': [exp_desc],
-                'Amount': [exp_amount], # Stored as positive value
+                'Amount': [exp_amount],
                 'Date': [str(exp_date)],
                 'Month': [exp_month],
-                'Year': [exp_year]
+                'Year': [str(exp_date.year)]
             })
             st.session_state['expenses'] = pd.concat([st.session_state['expenses'], new_exp], ignore_index=True)
             st.success("Expense recorded successfully!")
@@ -403,7 +421,6 @@ elif menu == "📊 Expenses & Monthly/Annual P&L":
     patients_df = filter_by_clinic(st.session_state['patients'])
     expenses_df = filter_by_clinic(st.session_state['expenses'])
     
-    # Prepare Revenues by Month
     if not patients_df.empty and 'Date' in patients_df.columns:
         patients_df['Date'] = pd.to_datetime(patients_df['Date'], errors='coerce')
         patients_df['Month'] = patients_df['Date'].dt.strftime('%Y-%m')
@@ -412,24 +429,19 @@ elif menu == "📊 Expenses & Monthly/Annual P&L":
     else:
         rev_summary = pd.DataFrame(columns=['Month', 'Total Revenues'])
 
-    # Prepare Expenses by Month
     if not expenses_df.empty:
         exp_summary = expenses_df.groupby('Month')['Amount'].sum().reset_index()
         exp_summary.rename(columns={'Amount': 'Total Expenses'}, inplace=True)
     else:
         exp_summary = pd.DataFrame(columns=['Month', 'Total Expenses'])
         
-    # Merge and calculate Net Profit
     if not rev_summary.empty or not exp_summary.empty:
         pnl_df = pd.merge(rev_summary, exp_summary, on='Month', how='outer').fillna(0)
-        # Net Profit = Total Revenues minus Total Expenses
         pnl_df['Net Profit'] = pnl_df['Total Revenues'] - pnl_df['Total Expenses']
-        
         st.dataframe(pnl_df, use_container_width=True)
     else:
-        st.info("No financial data found for monthly calculation yet.")
+        st.info("No financial data found.")
 
-    # Detailed Expenses Table
     st.markdown("---")
     st.subheader("📋 Recorded Expenses & Salaries List")
     if not expenses_df.empty:
@@ -439,8 +451,41 @@ elif menu == "📊 Expenses & Monthly/Annual P&L":
 
 # 8. SUPER ADMIN: MANAGE PLANS & SUBSCRIPTIONS
 elif menu == "👑 Super Admin: Manage Plans & Subscriptions":
-    st.header("👑 SaaS Pricing Plans & Subscriptions Control")
+    st.header("👑 SaaS Pricing Plans & Automated Subscriptions Control")
+    
+    st.subheader("1. Update Plan Prices (EGP)")
+    with st.form("pricing_form"):
+        p1 = st.number_input("1 Month Price", value=st.session_state['pricing_plans']['1 Month'])
+        p3 = st.number_input("3 Months Price", value=st.session_state['pricing_plans']['3 Months'])
+        p6 = st.number_input("6 Months Price", value=st.session_state['pricing_plans']['6 Months'])
+        p9 = st.number_input("9 Months Price", value=st.session_state['pricing_plans']['9 Months'])
+        py = st.number_input("1 Year Price", value=st.session_state['pricing_plans']['1 Year'])
+        
+        update_prices = st.form_submit_button("Update Prices")
+        if update_prices:
+            st.session_state['pricing_plans'] = {
+                '1 Month': p1, '3 Months': p3, '6 Months': p6, '9 Months': p9, '1 Year': py
+            }
+            st.success("Prices updated!")
+            st.rerun()
+            
+    st.markdown("---")
+    st.subheader("2. Active Subscriptions & Expiry Dates")
     st.dataframe(st.session_state['subscriptions'], use_container_width=True)
+    
+    with st.form("extend_sub_form"):
+        st.subheader("Manually Extend or Update a Clinic Expiry Date")
+        ext_clinic = st.selectbox("Select Clinic", st.session_state['subscriptions']['Clinic'].tolist())
+        ext_days = st.number_input("Add Days to Expiry", min_value=1, value=30)
+        ext_btn = st.form_submit_button("Extend Subscription")
+        if ext_btn:
+            curr_expiry_str = st.session_state['subscriptions'].loc[st.session_state['subscriptions']['Clinic'] == ext_clinic, 'Expiry_Date'].values[0]
+            curr_expiry_date = datetime.strptime(curr_expiry_str, "%Y-%m-%d").date()
+            new_expiry_date = max(today, curr_expiry_date) + timedelta(days=ext_days)
+            
+            st.session_state['subscriptions'].loc[st.session_state['subscriptions']['Clinic'] == ext_clinic, 'Expiry_Date'] = str(new_expiry_date)
+            st.success(f"Subscription for {ext_clinic} extended until {new_expiry_date}!")
+            st.rerun()
 
 # 9. DOCTOR SETTINGS: STAFF PERMISSIONS
 elif menu == "⚙️ Doctor Settings: Staff Permissions":
