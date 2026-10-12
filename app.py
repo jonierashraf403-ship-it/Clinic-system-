@@ -183,8 +183,6 @@ if not st.session_state['logged_in']:
     # 1. LOGIN
     if auth_mode == "Login":
         st.subheader("🔐 Clinic Staff & Super Admin Login")
-        st.info("💡 للتوجه للوحة التحكم كأدمن عام، استخدم Username: `admin` و Password: `admin123`")
-        
         with st.form("login_form"):
             username_input = st.text_input("Username")
             password_input = st.text_input("Password", type="password")
@@ -217,7 +215,7 @@ if not st.session_state['logged_in']:
                     st.session_state['staff_finance'] = bool(user_match.iloc[0]['staff_finance'])
                     st.session_state['online_booking_enabled'] = bool(user_match.iloc[0]['enable_booking'])
                     st.session_state['brand_color'] = user_match.iloc[0]['brand_color'] or '#007BFF'
-                    st.success(f"تم تسجيل الدخول بنجاح كـ ({role_val})! جاري التوجيه...")
+                    st.success(f"تم تسجيل الدخول بنجاح! جاري التوجيه...")
                     st.rerun()
                 else:
                     st.error("خطأ في اسم المستخدم أو كلمة المرور.")
@@ -286,7 +284,7 @@ if not st.session_state['logged_in']:
     elif auth_mode == "Reset Password":
         st.subheader("Reset Password")
         with st.form("reset_form"):
-            reset_username = st.text_input("Enter Username (e.g. admin)")
+            reset_username = st.text_input("Enter Username")
             new_pass1 = st.text_input("New Password", type="password")
             new_pass2 = st.text_input("Confirm Password", type="password")
             reset_btn = st.form_submit_button("Reset")
