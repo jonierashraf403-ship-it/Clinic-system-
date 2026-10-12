@@ -92,11 +92,11 @@ def init_db():
         )
     ''')
     
-    # Force Reset / Seed Default Users to prevent login issues
+    # Force Reset / Seed Default Users with NEW Admin Credentials
     default_users = [
         ('doctor_main', '1234', 'Main Branch', 'Doctor', 0, 1, '#007BFF', ''),
         ('doctor_maadi', '1234', 'Maadi Branch', 'Doctor', 0, 1, '#28A745', ''),
-        ('admin', 'admin123', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', '')
+        ('jony ashraf', 'jony 7890', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', '')
     ]
     cursor.executemany('INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?, ?, ?)', default_users)
     
@@ -216,7 +216,7 @@ if not st.session_state['logged_in']:
                     st.session_state['staff_finance'] = bool(user_match.iloc[0]['staff_finance'])
                     st.session_state['online_booking_enabled'] = bool(user_match.iloc[0]['enable_booking'])
                     st.session_state['brand_color'] = user_match.iloc[0]['brand_color'] or '#007BFF'
-                    st.success(f"تم تسجيل الدخول بنجاح! جاري التوجيه...")
+                    st.success("تم تسجيل الدخول بنجاح! جاري التوجيه...")
                     st.rerun()
                 else:
                     st.error("خطأ في اسم المستخدم أو كلمة المرور.")
@@ -437,133 +437,4 @@ elif menu == "Patient E-Prescription & Files (Medical History)":
 
     st.markdown("---")
     st.subheader("📋 Patient Database & E-Prescription Sharing")
-    patients_df = run_query("SELECT * FROM patients", fetch=True)
-    patients_df = filter_by_clinic(patients_df, 'clinic')
-    
-    if not patients_df.empty:
-        for idx, row in patients_df.iterrows():
-            with st.expander(f"👤 Patient: {row['name']} ({row['phone']})"):
-                st.write(f"**Medical History / Allergies:** {row['medical_history']}")
-                st.write(f"**E-Prescription:** {row['prescription']}")
-                st.write(f"**Financials:** Paid: {row['paid']} {curr_symbol} | Remaining: {row['remaining']} {curr_symbol}")
-                
-                msg = urllib.parse.quote(f"Hello {row['name']},\nHere is your prescription from {row['clinic']}:\n{row['prescription']}")
-                st.markdown(f"[📲 Send Prescription via WhatsApp](https://wa.me/{row['phone']}?text={msg})")
-
-# 5. DOCTOR'S DRUG LIST
-elif menu == "💊 Doctor's Drug List (Clinic Master List)":
-    st.header("💊 Clinic Drug Master List (Doctor's Custom Database)")
-    drugs_df = run_query("SELECT drug_name, default_dosage FROM clinic_drugs WHERE clinic = ?", (current_clinic,), fetch=True)
-    st.dataframe(drugs_df, use_container_width=True)
-    
-    with st.form("add_drug_form"):
-        st.subheader("➕ Add New Medication to Clinic Database")
-        new_drug_name = st.text_input("Medication Name & Strength")
-        new_default_dose = st.text_input("Default Dosage Instructions")
-        
-        save_drug = st.form_submit_button("Add to Master Drug List")
-        if save_drug and new_drug_name:
-            run_query(
-                "INSERT INTO clinic_drugs (clinic, drug_name, default_dosage) VALUES (?, ?, ?)",
-                (current_clinic, new_drug_name, new_default_dose)
-            )
-            st.success(f"Medication '{new_drug_name}' added successfully!")
-            st.rerun()
-
-# 6. FINANCIAL REPORTS & OUTSTANDING BALANCES
-elif menu == "Financial Reports & Outstanding Balances":
-    st.header(f"💰 Financial Reports ({curr_symbol})")
-    patients_df = run_query("SELECT * FROM patients", fetch=True)
-    patients_df = filter_by_clinic(patients_df, 'clinic')
-    if not patients_df.empty:
-        col1, col2 = st.columns(2)
-        col1.metric("Total Revenue Collected", f"{patients_df['paid'].sum()} {curr_symbol}")
-        col2.metric("Total Outstanding Debt", f"{patients_df['remaining'].sum()} {curr_symbol}")
-        st.dataframe(patients_df[['patient_id', 'name', 'phone', 'total_cost', 'paid', 'remaining']], use_container_width=True)
-    else:
-        st.info("No financial data found.")
-
-# 7. EXPENSES & NET P&L SUMMARY
-elif menu == "📊 Expenses & Net P&L Summary":
-    st.header(f"📊 Expenses & Profit/Loss ({curr_symbol})")
-    
-    with st.form("expense_form"):
-        st.subheader("➕ Record New Expense or Salary")
-        col1, col2 = st.columns(2)
-        with col1:
-            exp_clinic = current_clinic if current_role != "Super Admin" else st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
-            exp_category = st.selectbox("Expense Category", ["Staff Salaries", "Clinic Rent", "Medical Supplies & Tools", "Utilities", "Maintenance", "Other"])
-            exp_desc = st.text_input("Description / Notes")
-        with col2:
-            exp_amount = st.number_input("Amount", min_value=0.0, step=50.0)
-            exp_date = st.date_input("Date", today)
-            
-        save_exp = st.form_submit_button("Save Expense")
-        if save_exp and exp_amount > 0:
-            exp_month = exp_date.strftime("%Y-%m")
-            run_query(
-                "INSERT INTO expenses (clinic, category, description, amount, date, month, year) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (exp_clinic, exp_category, exp_desc, exp_amount, str(exp_date), exp_month, str(exp_date.year))
-            )
-            st.success("Expense recorded successfully!")
-            st.rerun()
-
-    st.markdown("---")
-    patients_df = run_query("SELECT * FROM patients", fetch=True)
-    patients_df = filter_by_clinic(patients_df, 'clinic')
-    expenses_df = run_query("SELECT * FROM expenses", fetch=True)
-    expenses_df = filter_by_clinic(expenses_df, 'clinic')
-    
-    rev = patients_df['paid'].sum() if not patients_df.empty else 0
-    exp = expenses_df['amount'].sum() if not expenses_df.empty else 0
-    net = rev - exp
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Revenues", f"{rev} {curr_symbol}")
-    c2.metric("Total Expenses & Salaries", f"{exp} {curr_symbol}")
-    c3.metric("Net Profit", f"{net} {curr_symbol}", delta=f"{net} {curr_symbol}")
-    
-    st.subheader("📋 Recorded Expenses List")
-    if not expenses_df.empty:
-        st.dataframe(expenses_df, use_container_width=True)
-
-# 8. CLINIC BRANDING & CUSTOM THEME (WHITE-LABEL)
-elif menu == "🎨 Clinic Branding & Custom Theme (White-Label)":
-    st.header("🎨 White-Labeling & Clinic Branding Customization")
-    with st.form("branding_form"):
-        st.subheader("1. Select Brand Primary Color")
-        chosen_color = st.color_picker("Choose Main Accent Color", st.session_state['brand_color'])
-        
-        st.subheader("2. Upload Clinic Logo")
-        logo_file = st.file_uploader("Upload Clinic Logo (PNG, JPG)", type=['png', 'jpg', 'jpeg'])
-        
-        save_brand = st.form_submit_button("Apply Branding & Save Theme")
-        if save_brand:
-            st.session_state['brand_color'] = chosen_color
-            run_query("UPDATE users SET brand_color = ? WHERE username = ?", (chosen_color, st.session_state['username']))
-            st.success("🎉 Clinic Branding and Color Theme updated successfully!")
-            st.rerun()
-
-# 9. SUPER ADMIN CONTROL
-elif menu == "👑 Super Admin: Global Plans & Subscriptions":
-    st.header("👑 Super Admin Control")
-    subs_df = run_query("SELECT * FROM subscriptions", fetch=True)
-    st.dataframe(subs_df, use_container_width=True)
-
-# 10. DOCTOR SETTINGS
-elif menu == "⚙️ Doctor Settings: Feature Controls":
-    st.header("⚙️ Doctor Settings & Feature Controls")
-    with st.form("doctor_settings_form"):
-        allow_f = st.checkbox("Allow Staff to View Financial Reports", value=staff_can_view_finance)
-        enable_online_b = st.checkbox("Enable Online Patient Self-Booking Portal", value=online_booking_enabled)
-        
-        save_settings = st.form_submit_button("Save Clinic Settings")
-        if save_settings:
-            st.session_state['staff_finance'] = allow_f
-            st.session_state['online_booking_enabled'] = enable_online_b
-            run_query(
-                "UPDATE users SET staff_finance = ?, enable_booking = ? WHERE username = ?",
-                (int(allow_f), int(enable_online_b), st.session_state['username'])
-            )
-            st.success("Settings updated successfully!")
-            st.rerun()
+    patients_df = run_query("SELECT * FROM patients", fetch=
