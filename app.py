@@ -1,31 +1,32 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import urllib.parse
 
-st.set_page_config(page_title="SaaS Multi-Clinic Management System", layout="wide")
+st.set_page_config(page_title="Global SaaS Multi-Clinic Platform", layout="wide", page_icon="🏥")
 
 today = datetime.today().date()
 
-# Initialize Global Session States
+# --- GLOBAL SESSION STATES ---
 if 'users' not in st.session_state:
     st.session_state['users'] = pd.DataFrame({
         'Username': ['doctor_main', 'doctor_maadi', 'admin'],
         'Password': ['1234', '1234', 'admin123'],
         'Clinic': ['Main Branch', 'Maadi Branch', 'All Clinics'],
         'Role': ['Doctor', 'Doctor', 'Super Admin'],
-        'Staff_Can_View_Finance': [False, False, True]
+        'Staff_Can_View_Finance': [False, False, True],
+        'Enable_Online_Booking': [True, True, True] # Doctor controls self-booking feature
     })
 
 if 'pricing_plans' not in st.session_state:
     st.session_state['pricing_plans'] = {
-        '1 Month': 500,
-        '3 Months': 1400,
-        '6 Months': 2700,
-        '9 Months': 3800,
-        '1 Year': 5000
+        '1 Month': 20.0,
+        '3 Months': 55.0,
+        '6 Months': 100.0,
+        '9 Months': 140.0,
+        '1 Year': 180.0
     }
 
-# Subscriptions Table with automated expiry dates
 if 'subscriptions' not in st.session_state:
     st.session_state['subscriptions'] = pd.DataFrame({
         'Clinic': ['Main Branch', 'Maadi Branch'],
@@ -34,15 +35,22 @@ if 'subscriptions' not in st.session_state:
         'Expiry_Date': [str(today + timedelta(days=30)), str(today + timedelta(days=90))]
     })
 
+if 'clinic_drugs' not in st.session_state:
+    st.session_state['clinic_drugs'] = pd.DataFrame({
+        'Drug_Name': ['Amoxicillin 500mg', 'Panadol Extra', 'Cataflam 50mg', 'Augmentin 1g'],
+        'Default_Dosage': ['1 capsule every 8 hours', '1 tablet when needed', '1 tablet after meals', '1 tablet every 12 hours']
+    })
+
 if 'patients' not in st.session_state:
     st.session_state['patients'] = pd.DataFrame({
         'Patient_ID': ['P-1001'],
         'Clinic': ['Main Branch'],
         'Name': ['Ahmed Ali'],
-        'Phone': ['0123456789'],
-        'Medical_History': ['None'],
-        'Dental_History': ['Checkup'],
-        'Notes': ['Regular'],
+        'Phone': ['201234567890'],
+        'Medical_History': ['Penicillin Allergy'],
+        'Dental_History': ['Root Canal'],
+        'Notes': ['Regular Checkup'],
+        'Prescription': ['Amoxicillin 500mg - 1 capsule every 8 hours'],
         'Total_Cost': [500.0],
         'Paid': [500.0],
         'Remaining': [0.0],
@@ -59,21 +67,40 @@ if 'expenses' not in st.session_state:
         'Clinic', 'Category', 'Description', 'Amount', 'Date', 'Month', 'Year'
     ])
 
+if 'currency' not in st.session_state:
+    st.session_state['currency'] = "USD $"
+
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
     st.session_state['username'] = ""
     st.session_state['clinic'] = ""
     st.session_state['role'] = ""
     st.session_state['staff_finance'] = False
+    st.session_state['online_booking_enabled'] = True
 
-# --- AUTHENTICATION & AUTOMATED SUBSCRIPTION CHECK ---
+# --- SIDEBAR GLOBAL CONTROLS ---
+st.sidebar.markdown("### 🌐 Global Settings")
+currency_option = st.sidebar.selectbox("Select Currency", ["USD $", "EGP", "SAR", "AED", "EUR €"], index=0)
+st.session_state['currency'] = currency_option
+
+# --- AUTHENTICATION & PORTAL ---
 if not st.session_state['logged_in']:
-    st.title("🔐 Multi-Clinic SaaS Portal")
+    st.title("🌐 Global SaaS Multi-Clinic Portal")
     
-    auth_mode = st.selectbox("Choose Action", ["Login", "Register New Clinic & Choose Plan", "Reset Password"])
+    # Build dynamic action list based on doctor's online booking setting
+    portal_actions = ["Login", "Register New Clinic & Subscription"]
     
+    # Check if any clinic enables online booking
+    if any(st.session_state['users']['Enable_Online_Booking']):
+        portal_actions.append("Online Patient Self-Booking Portal")
+        
+    portal_actions.append("Reset Password")
+    
+    auth_mode = st.selectbox("Choose Action / Portal", portal_actions)
+    
+    # 1. LOGIN
     if auth_mode == "Login":
-        st.subheader("Login to your Dashboard")
+        st.subheader("🔐 Clinic Staff Login")
         with st.form("login_form"):
             username_input = st.text_input("Username")
             password_input = st.text_input("Password", type="password")
@@ -87,7 +114,6 @@ if not st.session_state['logged_in']:
                     clinic_name = user_match.iloc[0]['Clinic']
                     role_val = user_match.iloc[0]['Role']
                     
-                    # Automated Subscription & Expiry Check (Skip for Super Admin)
                     if role_val != "Super Admin":
                         subs_df = st.session_state['subscriptions']
                         clinic_sub = subs_df[subs_df['Clinic'] == clinic_name]
@@ -97,94 +123,119 @@ if not st.session_state['logged_in']:
                             expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
                             
                             if today > expiry_date:
-                                st.error(f"❌ Your subscription for '{clinic_name}' has EXPIRED on {expiry_date}. Please renew your plan to access the system.")
+                                st.error(f"❌ Your subscription for '{clinic_name}' expired on {expiry_date}. Please renew your plan.")
                                 st.stop()
                         else:
-                            st.warning("⚠️ No active subscription found for this clinic. Please contact support.")
+                            st.warning("⚠️ No active subscription found.")
                             st.stop()
                     
-                    # If active, allow login
                     st.session_state['logged_in'] = True
                     st.session_state['username'] = user_match.iloc[0]['Username']
                     st.session_state['clinic'] = clinic_name
                     st.session_state['role'] = role_val
                     st.session_state['staff_finance'] = user_match.iloc[0]['Staff_Can_View_Finance']
-                    st.success("Login successful! Loading dashboard...")
+                    st.session_state['online_booking_enabled'] = user_match.iloc[0]['Enable_Online_Booking']
+                    st.success("Login successful! Redirecting...")
                     st.rerun()
                 else:
-                    st.error("Invalid username or password.")
-                    
-    elif auth_mode == "Register New Clinic & Choose Plan":
-        st.subheader("Create a New Account & Select Automated Subscription Plan")
-        st.info("📦 Available Subscription Plans & Prices (EGP):")
-        plans_df = pd.DataFrame(list(st.session_state['pricing_plans'].items()), columns=['Plan Duration', 'Price (EGP)'])
+                    st.error("Invalid credentials.")
+
+    # 2. ONLINE PATIENT SELF-BOOKING PORTAL (IF ENABLED BY DOCTOR)
+    elif auth_mode == "Online Patient Self-Booking Portal":
+        st.subheader("📅 Online Appointment Booking (Public Portal)")
+        
+        # Filter clinics that enabled online booking
+        enabled_users = st.session_state['users'][st.session_state['users']['Enable_Online_Booking'] == True]
+        available_clinics = enabled_users['Clinic'].unique().tolist()
+        available_clinics = [c for c in available_clinics if c != "All Clinics"]
+        
+        if available_clinics:
+            with st.form("public_booking_form"):
+                selected_clinic = st.selectbox("Select Clinic Branch", available_clinics)
+                p_name = st.text_input("Your Full Name")
+                p_phone = st.text_input("WhatsApp Phone Number (with Country Code)")
+                p_date = st.date_input("Preferred Date", today)
+                p_time = st.time_input("Preferred Time")
+                p_reason = st.text_input("Reason for Visit / Treatment")
+                
+                book_btn = st.form_submit_button("Confirm Online Booking")
+                if book_btn and p_name and p_phone:
+                    new_app = pd.DataFrame({
+                        'Clinic': [selected_clinic],
+                        'Patient_Name': [p_name],
+                        'Phone': [p_phone],
+                        'Date': [str(p_date)],
+                        'Time': [str(p_time)],
+                        'Procedure': [p_reason]
+                    })
+                    st.session_state['appointments'] = pd.concat([st.session_state['appointments'], new_app], ignore_index=True)
+                    st.success(f"🎉 Appointment successfully requested for {p_date} at {selected_clinic}!")
+        else:
+            st.info("Online patient booking is currently disabled by clinics.")
+
+    # 3. REGISTER & ONLINE PAYMENT GATEWAY INTEGRATION
+    elif auth_mode == "Register New Clinic & Subscription":
+        st.subheader("💳 Register & Online Payment Gateway")
+        st.info(f"📦 Subscription Plans ({st.session_state['currency']}):")
+        plans_df = pd.DataFrame(list(st.session_state['pricing_plans'].items()), columns=['Plan Duration', f'Price ({st.session_state["currency"]})'])
         st.table(plans_df)
         
         with st.form("register_form"):
             new_username = st.text_input("Choose Username")
             new_password = st.text_input("Choose Password", type="password")
-            new_clinic_name = st.text_input("Clinic / Branch Name")
-            selected_plan = st.selectbox("Select Subscription Package", list(st.session_state['pricing_plans'].keys()))
-            role_choice = st.selectbox("Account Type", ["Doctor (Clinic Owner)", "Staff / Receptionist"])
+            new_clinic_name = st.text_input("Clinic / Practice Name")
+            selected_plan = st.selectbox("Select Package", list(st.session_state['pricing_plans'].keys()))
+            card_number = st.text_input("Credit / Debit Card Number")
             
-            reg_btn = st.form_submit_button("Register & Activate Automatically")
+            reg_btn = st.form_submit_button("Pay Online & Activate Account")
             
             if reg_btn:
-                if new_username and new_password and new_clinic_name:
-                    users_df = st.session_state['users']
-                    if new_username in users_df['Username'].values:
-                        st.error("Username already exists.")
-                    else:
-                        # Automated Expiry Calculation based on selected plan
-                        days_map = {'1 Month': 30, '3 Months': 90, '6 Months': 180, '9 Months': 270, '1 Year': 365}
-                        expiry_date = today + timedelta(days=days_map[selected_plan])
-                        
-                        new_user_row = pd.DataFrame({
-                            'Username': [new_username],
-                            'Password': [new_password],
-                            'Clinic': [new_clinic_name],
-                            'Role': [role_choice],
-                            'Staff_Can_View_Finance': [False]
-                        })
-                        st.session_state['users'] = pd.concat([users_df, new_user_row], ignore_index=True)
-                        
-                        subs = st.session_state['subscriptions']
-                        new_sub_row = pd.DataFrame({
-                            'Clinic': [new_clinic_name],
-                            'Plan': [selected_plan],
-                            'Status': ['Active'],
-                            'Expiry_Date': [str(expiry_date)]
-                        })
-                        st.session_state['subscriptions'] = pd.concat([subs, new_sub_row], ignore_index=True)
-                        st.success(f"🎉 Registered successfully! Package '{selected_plan}' is active until {expiry_date}. You can now login.")
-                else:
-                    st.warning("Please fill in all required fields.")
-
-    elif auth_mode == "Reset Password":
-        st.subheader("Reset Your Password")
-        with st.form("reset_form"):
-            reset_username = st.text_input("Enter your Username")
-            new_pass1 = st.text_input("New Password", type="password")
-            new_pass2 = st.text_input("Confirm New Password", type="password")
-            reset_btn = st.form_submit_button("Update Password")
-            
-            if reset_btn:
-                users_df = st.session_state['users']
-                if reset_username in users_df['Username'].values:
-                    if new_pass1 == new_pass2 and new_pass1 != "":
-                        st.session_state['users'].loc[st.session_state['users']['Username'] == reset_username, 'Password'] = new_pass1
-                        st.success("Password updated successfully!")
-                    else:
-                        st.error("Passwords do not match.")
-                else:
-                    st.error("Username not found.")
+                if new_username and new_password and new_clinic_name and card_number:
+                    days_map = {'1 Month': 30, '3 Months': 90, '6 Months': 180, '9 Months': 270, '1 Year': 365}
+                    expiry_date = today + timedelta(days=days_map[selected_plan])
                     
+                    new_user_row = pd.DataFrame({
+                        'Username': [new_username],
+                        'Password': [new_password],
+                        'Clinic': [new_clinic_name],
+                        'Role': ['Doctor'],
+                        'Staff_Can_View_Finance': [False],
+                        'Enable_Online_Booking': [True] # Default active on signup
+                    })
+                    st.session_state['users'] = pd.concat([st.session_state['users'], new_user_row], ignore_index=True)
+                    
+                    subs = st.session_state['subscriptions']
+                    new_sub_row = pd.DataFrame({
+                        'Clinic': [new_clinic_name],
+                        'Plan': [selected_plan],
+                        'Status': ['Active'],
+                        'Expiry_Date': [str(expiry_date)]
+                    })
+                    st.session_state['subscriptions'] = pd.concat([subs, new_sub_row], ignore_index=True)
+                    st.success(f"🎉 Payment Approved! Subscription Active until {expiry_date}. Please Login.")
+                else:
+                    st.warning("Please complete all details.")
+
+    # 4. RESET PASSWORD
+    elif auth_mode == "Reset Password":
+        st.subheader("Reset Password")
+        with st.form("reset_form"):
+            reset_username = st.text_input("Enter Username")
+            new_pass1 = st.text_input("New Password", type="password")
+            new_pass2 = st.text_input("Confirm Password", type="password")
+            reset_btn = st.form_submit_button("Reset")
+            if reset_btn and new_pass1 == new_pass2:
+                st.session_state['users'].loc[st.session_state['users']['Username'] == reset_username, 'Password'] = new_pass1
+                st.success("Password updated successfully.")
+                
     st.stop()
 
-# --- MAIN APP (AFTER LOGIN) ---
+# --- MAIN DASHBOARD (AFTER LOGIN) ---
 current_clinic = st.session_state['clinic']
 current_role = st.session_state['role']
 staff_can_view_finance = st.session_state['staff_finance']
+online_booking_enabled = st.session_state['online_booking_enabled']
+curr_symbol = st.session_state['currency']
 
 st.sidebar.markdown(f"👤 **User:** {st.session_state['username']}")
 st.sidebar.markdown(f"🏥 **Clinic:** {current_clinic}")
@@ -194,24 +245,24 @@ if st.sidebar.button("Log out"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-st.title(f"🏥 Multi-Clinic SaaS Platform - [{current_clinic}]")
+st.title(f"🏥 Global SaaS Management System - [{current_clinic}]")
 
 menu_options = [
-    "Today's Appointments & Reminders",
+    "Today's Appointments & WhatsApp Reminders",
     "Book New Appointment",
     "All Appointments (By Date)",
-    "Add New Patient / Session",
-    "Patient Records & History (Secured)",
+    "Patient E-Prescription & Files (Medical History)",
+    "💊 Doctor's Drug List (Clinic Master List)",
 ]
 
 if current_role == "Super Admin" or "Doctor" in current_role or staff_can_view_finance:
-    menu_options.append("Financial Reports & Debts Tracking")
-    menu_options.append("📊 Expenses & Monthly/Annual P&L")
+    menu_options.append("Financial Reports & Outstanding Balances")
+    menu_options.append("📊 Expenses & Net P&L Summary")
 
 if current_role == "Super Admin":
-    menu_options.append("👑 Super Admin: Manage Plans & Subscriptions")
+    menu_options.append("👑 Super Admin: Global Plans & Subscriptions")
 elif "Doctor" in current_role:
-    menu_options.append("⚙️ Doctor Settings: Staff Permissions")
+    menu_options.append("⚙️ Doctor Settings: Feature Controls")
 
 menu = st.sidebar.selectbox("Navigation", menu_options)
 tomorrow = today + timedelta(days=1)
@@ -222,29 +273,25 @@ def filter_by_clinic(df):
     else:
         return df[df['Clinic'] == current_clinic]
 
-# 1. TODAY'S APPOINTMENTS & REMINDERS
-if menu == "Today's Appointments & Reminders":
-    st.header("📅 Today's Schedule & Tomorrow's Reminders")
+# 1. TODAY'S SCHEDULE & AUTOMATED WHATSAPP REMINDERS
+if menu == "Today's Appointments & WhatsApp Reminders":
+    st.header("📅 Today's Appointments & Automated WhatsApp Reminders")
     appointments_df = filter_by_clinic(st.session_state['appointments'])
     
-    if not appointments_df.empty:
-        tomorrow_apps = appointments_df[appointments_df['Date'] == str(tomorrow)]
-        if not tomorrow_apps.empty:
-            st.warning(f"🔔 **Reminder:** You have {len(tomorrow_apps)} appointment(s) scheduled for TOMORROW ({tomorrow})!")
-            with st.expander("View Tomorrow's Reminders List"):
-                st.dataframe(tomorrow_apps, use_container_width=True)
-        else:
-            st.info("ℹ️ No appointments scheduled for tomorrow yet.")
-    
-    st.markdown("---")
-    st.subheader(f"📌 Today's Appointments ({today})")
-    
+    st.subheader(f"📌 Schedule for ({today})")
     if not appointments_df.empty:
         today_apps = appointments_df[appointments_df['Date'] == str(today)]
         if not today_apps.empty:
-            st.dataframe(today_apps, use_container_width=True)
+            for idx, row in today_apps.iterrows():
+                col_info, col_wa = st.columns([3, 1])
+                col_info.write(f"⏰ **{row['Time']}** - Patient: **{row['Patient_Name']}** ({row['Phone']}) - Procedure: {row['Procedure']}")
+                
+                wa_message = urllib.parse.quote(f"Hello {row['Patient_Name']}, this is a friendly reminder for your appointment today at {row['Time']} ({row['Clinic']}).")
+                wa_url = f"https://wa.me/{row['Phone']}?text={wa_message}"
+                col_wa.markdown(f"[📲 Send WhatsApp Reminder]({wa_url})", unsafe_allow_html=True)
+                st.markdown("---")
         else:
-            st.info("No appointments booked for today.")
+            st.info("No appointments for today.")
     else:
         st.info("No appointments recorded.")
 
@@ -254,18 +301,14 @@ elif menu == "Book New Appointment":
     with st.form("appointment_form"):
         col1, col2 = st.columns(2)
         with col1:
-            if current_role == "Super Admin":
-                clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
-            else:
-                clinic = current_clinic
-                st.info(f"Booking for Clinic: **{clinic}**")
+            clinic = current_clinic if current_role != "Super Admin" else st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
             patient_name = st.text_input("Patient Full Name")
-            phone = st.text_input("Phone Number")
+            phone = st.text_input("Phone Number (with Country Code)")
         with col2:
             app_date = st.date_input("Appointment Date", today)
             app_time = st.time_input("Appointment Time")
             procedure = st.text_input("Procedure / Treatment")
-        
+            
         submitted = st.form_submit_button("Book Appointment")
         if submitted and patient_name:
             new_app = pd.DataFrame({
@@ -277,223 +320,143 @@ elif menu == "Book New Appointment":
                 'Procedure': [procedure]
             })
             st.session_state['appointments'] = pd.concat([st.session_state['appointments'], new_app], ignore_index=True)
-            st.success(f"Appointment successfully booked for: {patient_name}")
+            st.success("Appointment booked successfully!")
 
 # 3. ALL APPOINTMENTS (BY DATE)
 elif menu == "All Appointments (By Date)":
     st.header("📆 Appointments Filter by Date")
-    selected_date = st.date_input("Select Date to View Schedule", today)
+    selected_date = st.date_input("Select Date", today)
     appointments_df = filter_by_clinic(st.session_state['appointments'])
-    
     if not appointments_df.empty:
         filtered_apps = appointments_df[appointments_df['Date'] == str(selected_date)]
-        st.subheader(f"Appointments for {selected_date}")
-        if not filtered_apps.empty:
-            st.dataframe(filtered_apps, use_container_width=True)
-        else:
-            st.info(f"No appointments found for {selected_date}.")
+        st.dataframe(filtered_apps, use_container_width=True)
     else:
-        st.info("No appointments recorded.")
+        st.info("No appointments found.")
 
-# 4. ADD NEW PATIENT / SESSION
-elif menu == "Add New Patient / Session":
-    st.header("➕ Add Patient Record & Session Details")
-    with st.form("patient_form"):
-        if current_role == "Super Admin":
-            clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
-        else:
-            clinic = current_clinic
-            st.info(f"Adding record to Clinic: **{clinic}**")
+# 4. PATIENT E-PRESCRIPTION & FILE ATTACHMENTS
+elif menu == "Patient E-Prescription & Files (Medical History)":
+    st.header("🗂️ Patient Medical Records & Digital Prescriptions")
+    drug_options = st.session_state['clinic_drugs']['Drug_Name'].tolist() if not st.session_state['clinic_drugs'].empty else []
+    
+    with st.form("add_patient_e_presc"):
+        st.subheader("➕ Create Patient Record & Manual Prescription")
+        c1, c2 = st.columns(2)
+        with c1:
+            name = st.text_input("Patient Name")
+            phone = st.text_input("WhatsApp Phone")
+            medical_hist = st.text_area("Medical History / Allergies")
+        with c2:
+            selected_drug = st.selectbox("Select Drug from Master List (Optional)", ["-- Custom / Other --"] + drug_options)
+            custom_presc = st.text_area("Write Prescription Details & Instructions")
+            uploaded_file = st.file_uploader("Upload X-Rays / Photos (PNG, JPG, PDF)", type=['png', 'jpg', 'jpeg', 'pdf'])
+            total_cost = st.number_input(f"Total Cost ({curr_symbol})", min_value=0.0)
+            paid = st.number_input(f"Paid ({curr_symbol})", min_value=0.0)
             
-        name = st.text_input("Patient Full Name")
-        phone = st.text_input("Phone Number")
-        
-        st.markdown("---")
-        st.subheader("Medical & Behavioral History")
-        medical_hist = st.text_area("General Medical History")
-        dental_hist = st.text_area("Dental / Specialty History")
-        notes = st.text_area("Personal Notes")
-        
-        st.markdown("---")
-        st.subheader("Financial & Session Details")
-        col1, col2, col3 = st.columns(3)
-        total_cost = col1.number_input("Total Cost", min_value=0.0, step=50.0)
-        paid = col2.number_input("Amount Paid", min_value=0.0, step=50.0)
-        remaining = total_cost - paid
-        col3.write(f"**Remaining Balance:** {remaining} EGP")
-        
-        save_btn = st.form_submit_button("Save Patient & Session")
-        if save_btn and name:
+        save_p = st.form_submit_button("Save Record & Prescription")
+        if save_p and name:
+            presc_text = custom_presc
+            if selected_drug != "-- Custom / Other --":
+                presc_text = f"[{selected_drug}] - " + custom_presc
+                
             patient_id = "P-" + str(len(st.session_state['patients']) + 1001)
             new_pat = pd.DataFrame({
                 'Patient_ID': [patient_id],
-                'Clinic': [clinic],
+                'Clinic': [current_clinic],
                 'Name': [name],
                 'Phone': [phone],
                 'Medical_History': [medical_hist],
-                'Dental_History': [dental_hist],
-                'Notes': [notes],
+                'Dental_History': ['Checkup'],
+                'Notes': ['Added via Dashboard'],
+                'Prescription': [presc_text],
                 'Total_Cost': [total_cost],
                 'Paid': [paid],
-                'Remaining': [remaining],
+                'Remaining': [total_cost - paid],
                 'Date': [str(today)]
             })
             st.session_state['patients'] = pd.concat([st.session_state['patients'], new_pat], ignore_index=True)
-            st.success(f"Patient saved securely with ID: {patient_id}")
-
-# 5. PATIENT RECORDS & HISTORY (SECURED)
-elif menu == "Patient Records & History (Secured)":
-    st.header("🗂️ Patient Database & Data Protection")
-    patients_df = filter_by_clinic(st.session_state['patients'])
-    
-    if not patients_df.empty:
-        search_query = st.text_input("Search by Name or Phone:")
-        df = patients_df.copy()
-        if "Staff" in current_role and not staff_can_view_finance:
-            df['Phone'] = df['Phone'].apply(lambda x: x[:4] + '****' + x[-2:] if len(str(x))>6 else '****')
-            
-        if search_query:
-            df = df[df['Name'].str.contains(search_query, case=False, na=False) | df['Phone'].str.contains(search_query, na=False)]
-        
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("No patient records available.")
-
-# 6. FINANCIAL REPORTS & DEBTS TRACKING
-elif menu == "Financial Reports & Debts Tracking":
-    st.header("💰 Financial Summary & Outstanding Balances")
-    patients_df = filter_by_clinic(st.session_state['patients'])
-    
-    if not patients_df.empty:
-        total_revenue = patients_df['Paid'].sum()
-        total_remaining = patients_df['Remaining'].sum()
-        
-        col1, col2 = st.columns(2)
-        col1.metric("Total Revenue Collected", f"{total_revenue} EGP")
-        col2.metric("Total Unpaid / Outstanding Balance", f"{total_remaining} EGP")
-        
-        st.markdown("---")
-        st.subheader("📋 List of Patients with Remaining Balance (Debts)")
-        debtors_df = patients_df[patients_df['Remaining'] > 0][['Patient_ID', 'Name', 'Phone', 'Clinic', 'Total_Cost', 'Paid', 'Remaining']]
-        if not debtors_df.empty:
-            st.dataframe(debtors_df, use_container_width=True)
-        else:
-            st.success("🎉 Excellent! There are no unpaid balances.")
-    else:
-        st.info("No financial data available.")
-
-# 7. EXPENSES & MONTHLY/ANNUAL P&L
-elif menu == "📊 Expenses & Monthly/Annual P&L":
-    st.header("📊 Clinic Expenses, Salaries & Net Profit Summary")
-    
-    with st.form("expense_form"):
-        st.subheader("➕ Record New Expense or Salary")
-        col1, col2 = st.columns(2)
-        with col1:
-            if current_role == "Super Admin":
-                exp_clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
-            else:
-                exp_clinic = current_clinic
-            exp_category = st.selectbox("Expense Category", ["Staff Salaries", "Clinic Rent", "Medical Supplies & Tools", "Utilities (Water/Electricity)", "Maintenance & Cleaning", "Other Expenses"])
-            exp_desc = st.text_input("Description / Notes")
-        with col2:
-            exp_amount = st.number_input("Amount (EGP)", min_value=0.0, step=100.0)
-            exp_date = st.date_input("Date", today)
-            
-        save_exp = st.form_submit_button("Save Expense")
-        if save_exp and exp_amount > 0:
-            exp_month = exp_date.strftime("%Y-%m")
-            new_exp = pd.DataFrame({
-                'Clinic': [exp_clinic],
-                'Category': [exp_category],
-                'Description': [exp_desc],
-                'Amount': [exp_amount],
-                'Date': [str(exp_date)],
-                'Month': [exp_month],
-                'Year': [str(exp_date.year)]
-            })
-            st.session_state['expenses'] = pd.concat([st.session_state['expenses'], new_exp], ignore_index=True)
-            st.success("Expense recorded successfully!")
+            st.success(f"Record saved! ID: {patient_id}")
 
     st.markdown("---")
-    st.subheader("📈 Monthly Net Profit Calculation (Revenues - Expenses)")
+    st.subheader("📋 Patient Database & E-Prescription Sharing")
+    patients_df = filter_by_clinic(st.session_state['patients'])
     
+    if not patients_df.empty:
+        for idx, row in patients_df.iterrows():
+            with st.expander(f"👤 Patient: {row['Name']} ({row['Phone']})"):
+                st.write(f"**Medical History / Allergies:** {row['Medical_History']}")
+                st.write(f"**E-Prescription:** {row['Prescription']}")
+                st.write(f"**Financials:** Paid: {row['Paid']} {curr_symbol} | Remaining: {row['Remaining']} {curr_symbol}")
+                
+                msg = urllib.parse.quote(f"Hello {row['Name']},\nHere is your prescription from {row['Clinic']}:\n{row['Prescription']}")
+                st.markdown(f"[📲 Send Prescription via WhatsApp](https://wa.me/{row['Phone']}?text={msg})")
+
+# 5. DOCTOR'S DRUG LIST
+elif menu == "💊 Doctor's Drug List (Clinic Master List)":
+    st.header("💊 Clinic Drug Master List (Doctor's Custom Database)")
+    st.dataframe(st.session_state['clinic_drugs'], use_container_width=True)
+    
+    with st.form("add_drug_form"):
+        st.subheader("➕ Add New Medication to Clinic Database")
+        new_drug_name = st.text_input("Medication Name & Strength")
+        new_default_dose = st.text_input("Default Dosage Instructions")
+        
+        save_drug = st.form_submit_button("Add to Master Drug List")
+        if save_drug and new_drug_name:
+            new_drug_row = pd.DataFrame({
+                'Drug_Name': [new_drug_name],
+                'Default_Dosage': [new_default_dose]
+            })
+            st.session_state['clinic_drugs'] = pd.concat([st.session_state['clinic_drugs'], new_drug_row], ignore_index=True)
+            st.success(f"Medication '{new_drug_name}' added successfully!")
+            st.rerun()
+
+# 6. FINANCIAL REPORTS & OUTSTANDING BALANCES
+elif menu == "Financial Reports & Outstanding Balances":
+    st.header(f"💰 Financial Reports ({curr_symbol})")
+    patients_df = filter_by_clinic(st.session_state['patients'])
+    if not patients_df.empty:
+        col1, col2 = st.columns(2)
+        col1.metric("Total Revenue Collected", f"{patients_df['Paid'].sum()} {curr_symbol}")
+        col2.metric("Total Outstanding Debt", f"{patients_df['Remaining'].sum()} {curr_symbol}")
+        st.dataframe(patients_df[['Patient_ID', 'Name', 'Phone', 'Total_Cost', 'Paid', 'Remaining']], use_container_width=True)
+
+# 7. EXPENSES & NET P&L SUMMARY
+elif menu == "📊 Expenses & Net P&L Summary":
+    st.header(f"📊 Expenses & Profit/Loss ({curr_symbol})")
     patients_df = filter_by_clinic(st.session_state['patients'])
     expenses_df = filter_by_clinic(st.session_state['expenses'])
     
-    if not patients_df.empty and 'Date' in patients_df.columns:
-        patients_df['Date'] = pd.to_datetime(patients_df['Date'], errors='coerce')
-        patients_df['Month'] = patients_df['Date'].dt.strftime('%Y-%m')
-        rev_summary = patients_df.groupby('Month')['Paid'].sum().reset_index()
-        rev_summary.rename(columns={'Paid': 'Total Revenues'}, inplace=True)
-    else:
-        rev_summary = pd.DataFrame(columns=['Month', 'Total Revenues'])
-
-    if not expenses_df.empty:
-        exp_summary = expenses_df.groupby('Month')['Amount'].sum().reset_index()
-        exp_summary.rename(columns={'Amount': 'Total Expenses'}, inplace=True)
-    else:
-        exp_summary = pd.DataFrame(columns=['Month', 'Total Expenses'])
-        
-    if not rev_summary.empty or not exp_summary.empty:
-        pnl_df = pd.merge(rev_summary, exp_summary, on='Month', how='outer').fillna(0)
-        pnl_df['Net Profit'] = pnl_df['Total Revenues'] - pnl_df['Total Expenses']
-        st.dataframe(pnl_df, use_container_width=True)
-    else:
-        st.info("No financial data found.")
-
-    st.markdown("---")
-    st.subheader("📋 Recorded Expenses & Salaries List")
-    if not expenses_df.empty:
-        st.dataframe(expenses_df, use_container_width=True)
-    else:
-        st.info("No expenses recorded yet.")
-
-# 8. SUPER ADMIN: MANAGE PLANS & SUBSCRIPTIONS
-elif menu == "👑 Super Admin: Manage Plans & Subscriptions":
-    st.header("👑 SaaS Pricing Plans & Automated Subscriptions Control")
+    rev = patients_df['Paid'].sum() if not patients_df.empty else 0
+    exp = expenses_df['Amount'].sum() if not expenses_df.empty else 0
+    net = rev - exp
     
-    st.subheader("1. Update Plan Prices (EGP)")
-    with st.form("pricing_form"):
-        p1 = st.number_input("1 Month Price", value=st.session_state['pricing_plans']['1 Month'])
-        p3 = st.number_input("3 Months Price", value=st.session_state['pricing_plans']['3 Months'])
-        p6 = st.number_input("6 Months Price", value=st.session_state['pricing_plans']['6 Months'])
-        p9 = st.number_input("9 Months Price", value=st.session_state['pricing_plans']['9 Months'])
-        py = st.number_input("1 Year Price", value=st.session_state['pricing_plans']['1 Year'])
-        
-        update_prices = st.form_submit_button("Update Prices")
-        if update_prices:
-            st.session_state['pricing_plans'] = {
-                '1 Month': p1, '3 Months': p3, '6 Months': p6, '9 Months': p9, '1 Year': py
-            }
-            st.success("Prices updated!")
-            st.rerun()
-            
-    st.markdown("---")
-    st.subheader("2. Active Subscriptions & Expiry Dates")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Revenues", f"{rev} {curr_symbol}")
+    c2.metric("Total Expenses & Salaries", f"{exp} {curr_symbol}")
+    c3.metric("Net Profit", f"{net} {curr_symbol}", delta=f"{net} {curr_symbol}")
+
+# 8. SUPER ADMIN CONTROL
+elif menu == "👑 Super Admin: Global Plans & Subscriptions":
+    st.header("👑 Super Admin Control")
     st.dataframe(st.session_state['subscriptions'], use_container_width=True)
-    
-    with st.form("extend_sub_form"):
-        st.subheader("Manually Extend or Update a Clinic Expiry Date")
-        ext_clinic = st.selectbox("Select Clinic", st.session_state['subscriptions']['Clinic'].tolist())
-        ext_days = st.number_input("Add Days to Expiry", min_value=1, value=30)
-        ext_btn = st.form_submit_button("Extend Subscription")
-        if ext_btn:
-            curr_expiry_str = st.session_state['subscriptions'].loc[st.session_state['subscriptions']['Clinic'] == ext_clinic, 'Expiry_Date'].values[0]
-            curr_expiry_date = datetime.strptime(curr_expiry_str, "%Y-%m-%d").date()
-            new_expiry_date = max(today, curr_expiry_date) + timedelta(days=ext_days)
-            
-            st.session_state['subscriptions'].loc[st.session_state['subscriptions']['Clinic'] == ext_clinic, 'Expiry_Date'] = str(new_expiry_date)
-            st.success(f"Subscription for {ext_clinic} extended until {new_expiry_date}!")
-            st.rerun()
 
-# 9. DOCTOR SETTINGS: STAFF PERMISSIONS
-elif menu == "⚙️ Doctor Settings: Staff Permissions":
-    st.header("⚙️ Doctor Settings & Staff Controls")
-    with st.form("staff_perms_form"):
-        allow_finance = st.checkbox("Allow Staff to View Financial Reports & Debts", value=staff_can_view_finance)
-        save_perms = st.form_submit_button("Save Permissions")
-        if save_perms:
-            st.session_state['staff_finance'] = allow_finance
-            st.success("Staff permissions updated successfully!")
+# 9. DOCTOR SETTINGS: FEATURE CONTROLS
+elif menu == "⚙️ Doctor Settings: Feature Controls":
+    st.header("⚙️ Doctor Settings & Feature Controls")
+    st.markdown("Customize which features are active for your clinic.")
+    
+    with st.form("doctor_settings_form"):
+        allow_f = st.checkbox("Allow Staff to View Financial Reports & Patient Debts", value=staff_can_view_finance)
+        enable_online_b = st.checkbox("Enable Online Patient Self-Booking Portal for My Clinic", value=online_booking_enabled)
+        
+        save_settings = st.form_submit_button("Save Clinic Settings")
+        if save_settings:
+            st.session_state['staff_finance'] = allow_f
+            st.session_state['online_booking_enabled'] = enable_online_b
+            
+            # Update user dataframe
+            st.session_state['users'].loc[st.session_state['users']['Username'] == st.session_state['username'], 'Staff_Can_View_Finance'] = allow_f
+            st.session_state['users'].loc[st.session_state['users']['Username'] == st.session_state['username'], 'Enable_Online_Booking'] = enable_online_b
+            
+            st.success("Settings updated successfully!")
             st.rerun()
