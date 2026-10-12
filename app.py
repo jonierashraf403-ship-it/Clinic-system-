@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import urllib.parse
 
-st.set_page_config(page_title="White-Label SaaS Clinic Platform", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="شامل - منصة إدارة العيادات", layout="wide", page_icon="🏥")
 
 today = datetime.today().date()
 
@@ -16,7 +16,7 @@ if 'users' not in st.session_state:
         'Role': ['Doctor', 'Doctor', 'Super Admin'],
         'Staff_Can_View_Finance': [False, False, True],
         'Enable_Online_Booking': [True, True, True],
-        'Brand_Color': ['#007BFF', '#28A745', '#17A2B8'], # Custom theme per clinic
+        'Brand_Color': ['#007BFF', '#28A745', '#17A2B8'],
         'Logo_URL': ['', '', '']
     })
 
@@ -86,7 +86,7 @@ st.sidebar.markdown("### 🌐 Global Settings")
 currency_option = st.sidebar.selectbox("Select Currency", ["USD $", "EGP", "SAR", "AED", "EUR €"], index=0)
 st.session_state['currency'] = currency_option
 
-# Apply Dynamic Clinic Branding CSS (White-Labeling)
+# Apply Dynamic Clinic Branding CSS
 if st.session_state['logged_in']:
     custom_color = st.session_state.get('brand_color', '#007BFF')
     st.markdown(f"""
@@ -99,15 +99,12 @@ if st.session_state['logged_in']:
         h1, h2, h3 {{
             color: {custom_color} !important;
         }}
-        .css-1d331aa {{
-            background-color: {custom_color}10 !important;
-        }}
         </style>
     """, unsafe_allow_html=True)
 
 # --- AUTHENTICATION & PORTAL ---
 if not st.session_state['logged_in']:
-    st.title("🌐 Global SaaS Multi-Clinic Portal")
+    st.title("🏥 شامل - منصة إدارة العيادات")
     
     portal_actions = ["Login", "Register New Clinic & Subscription"]
     if any(st.session_state['users']['Enable_Online_Booking']):
@@ -262,7 +259,7 @@ if st.sidebar.button("Log out"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-st.title(f"🏥 {current_clinic} - Management Portal")
+st.title(f"🏥 شامل - [{current_clinic}]")
 
 menu_options = [
     "Today's Appointments & WhatsApp Reminders",
@@ -453,11 +450,9 @@ elif menu == "📊 Expenses & Net P&L Summary":
     c2.metric("Total Expenses & Salaries", f"{exp} {curr_symbol}")
     c3.metric("Net Profit", f"{net} {curr_symbol}", delta=f"{net} {curr_symbol}")
 
-# 8. CLINIC BRANDING & CUSTOM THEME (WHITE-LABELING)
+# 8. CLINIC BRANDING & CUSTOM THEME (WHITE-LABEL)
 elif menu == "🎨 Clinic Branding & Custom Theme (White-Label)":
     st.header("🎨 White-Labeling & Clinic Branding Customization")
-    st.markdown("Customize your platform appearance to match your clinic's brand identity.")
-    
     with st.form("branding_form"):
         st.subheader("1. Select Brand Primary Color")
         chosen_color = st.color_picker("Choose Main Accent Color", st.session_state['brand_color'])
