@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import urllib.parse
 
-st.set_page_config(page_title="Global SaaS Multi-Clinic Platform", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="White-Label SaaS Clinic Platform", layout="wide", page_icon="🏥")
 
 today = datetime.today().date()
 
@@ -15,7 +15,9 @@ if 'users' not in st.session_state:
         'Clinic': ['Main Branch', 'Maadi Branch', 'All Clinics'],
         'Role': ['Doctor', 'Doctor', 'Super Admin'],
         'Staff_Can_View_Finance': [False, False, True],
-        'Enable_Online_Booking': [True, True, True] # Doctor controls self-booking feature
+        'Enable_Online_Booking': [True, True, True],
+        'Brand_Color': ['#007BFF', '#28A745', '#17A2B8'], # Custom theme per clinic
+        'Logo_URL': ['', '', '']
     })
 
 if 'pricing_plans' not in st.session_state:
@@ -77,23 +79,39 @@ if 'logged_in' not in st.session_state:
     st.session_state['role'] = ""
     st.session_state['staff_finance'] = False
     st.session_state['online_booking_enabled'] = True
+    st.session_state['brand_color'] = "#007BFF"
 
 # --- SIDEBAR GLOBAL CONTROLS ---
 st.sidebar.markdown("### 🌐 Global Settings")
 currency_option = st.sidebar.selectbox("Select Currency", ["USD $", "EGP", "SAR", "AED", "EUR €"], index=0)
 st.session_state['currency'] = currency_option
 
+# Apply Dynamic Clinic Branding CSS (White-Labeling)
+if st.session_state['logged_in']:
+    custom_color = st.session_state.get('brand_color', '#007BFF')
+    st.markdown(f"""
+        <style>
+        .stButton>button {{
+            background-color: {custom_color} !important;
+            color: white !important;
+            border-radius: 8px !important;
+        }}
+        h1, h2, h3 {{
+            color: {custom_color} !important;
+        }}
+        .css-1d331aa {{
+            background-color: {custom_color}10 !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
+
 # --- AUTHENTICATION & PORTAL ---
 if not st.session_state['logged_in']:
     st.title("🌐 Global SaaS Multi-Clinic Portal")
     
-    # Build dynamic action list based on doctor's online booking setting
     portal_actions = ["Login", "Register New Clinic & Subscription"]
-    
-    # Check if any clinic enables online booking
     if any(st.session_state['users']['Enable_Online_Booking']):
         portal_actions.append("Online Patient Self-Booking Portal")
-        
     portal_actions.append("Reset Password")
     
     auth_mode = st.selectbox("Choose Action / Portal", portal_actions)
@@ -135,19 +153,17 @@ if not st.session_state['logged_in']:
                     st.session_state['role'] = role_val
                     st.session_state['staff_finance'] = user_match.iloc[0]['Staff_Can_View_Finance']
                     st.session_state['online_booking_enabled'] = user_match.iloc[0]['Enable_Online_Booking']
+                    st.session_state['brand_color'] = user_match.iloc[0].get('Brand_Color', '#007BFF')
                     st.success("Login successful! Redirecting...")
                     st.rerun()
                 else:
                     st.error("Invalid credentials.")
 
-    # 2. ONLINE PATIENT SELF-BOOKING PORTAL (IF ENABLED BY DOCTOR)
+    # 2. ONLINE PATIENT SELF-BOOKING PORTAL
     elif auth_mode == "Online Patient Self-Booking Portal":
         st.subheader("📅 Online Appointment Booking (Public Portal)")
-        
-        # Filter clinics that enabled online booking
         enabled_users = st.session_state['users'][st.session_state['users']['Enable_Online_Booking'] == True]
-        available_clinics = enabled_users['Clinic'].unique().tolist()
-        available_clinics = [c for c in available_clinics if c != "All Clinics"]
+        available_clinics = [c for c in enabled_users['Clinic'].unique().tolist() if c != "All Clinics"]
         
         if available_clinics:
             with st.form("public_booking_form"):
@@ -173,7 +189,7 @@ if not st.session_state['logged_in']:
         else:
             st.info("Online patient booking is currently disabled by clinics.")
 
-    # 3. REGISTER & ONLINE PAYMENT GATEWAY INTEGRATION
+    # 3. REGISTER & ONLINE PAYMENT GATEWAY
     elif auth_mode == "Register New Clinic & Subscription":
         st.subheader("💳 Register & Online Payment Gateway")
         st.info(f"📦 Subscription Plans ({st.session_state['currency']}):")
@@ -188,7 +204,6 @@ if not st.session_state['logged_in']:
             card_number = st.text_input("Credit / Debit Card Number")
             
             reg_btn = st.form_submit_button("Pay Online & Activate Account")
-            
             if reg_btn:
                 if new_username and new_password and new_clinic_name and card_number:
                     days_map = {'1 Month': 30, '3 Months': 90, '6 Months': 180, '9 Months': 270, '1 Year': 365}
@@ -200,7 +215,9 @@ if not st.session_state['logged_in']:
                         'Clinic': [new_clinic_name],
                         'Role': ['Doctor'],
                         'Staff_Can_View_Finance': [False],
-                        'Enable_Online_Booking': [True] # Default active on signup
+                        'Enable_Online_Booking': [True],
+                        'Brand_Color': ['#007BFF'],
+                        'Logo_URL': ['']
                     })
                     st.session_state['users'] = pd.concat([st.session_state['users'], new_user_row], ignore_index=True)
                     
@@ -245,7 +262,7 @@ if st.sidebar.button("Log out"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-st.title(f"🏥 Global SaaS Management System - [{current_clinic}]")
+st.title(f"🏥 {current_clinic} - Management Portal")
 
 menu_options = [
     "Today's Appointments & WhatsApp Reminders",
@@ -262,6 +279,7 @@ if current_role == "Super Admin" or "Doctor" in current_role or staff_can_view_f
 if current_role == "Super Admin":
     menu_options.append("👑 Super Admin: Global Plans & Subscriptions")
 elif "Doctor" in current_role:
+    menu_options.append("🎨 Clinic Branding & Custom Theme (White-Label)")
     menu_options.append("⚙️ Doctor Settings: Feature Controls")
 
 menu = st.sidebar.selectbox("Navigation", menu_options)
@@ -435,28 +453,42 @@ elif menu == "📊 Expenses & Net P&L Summary":
     c2.metric("Total Expenses & Salaries", f"{exp} {curr_symbol}")
     c3.metric("Net Profit", f"{net} {curr_symbol}", delta=f"{net} {curr_symbol}")
 
-# 8. SUPER ADMIN CONTROL
+# 8. CLINIC BRANDING & CUSTOM THEME (WHITE-LABELING)
+elif menu == "🎨 Clinic Branding & Custom Theme (White-Label)":
+    st.header("🎨 White-Labeling & Clinic Branding Customization")
+    st.markdown("Customize your platform appearance to match your clinic's brand identity.")
+    
+    with st.form("branding_form"):
+        st.subheader("1. Select Brand Primary Color")
+        chosen_color = st.color_picker("Choose Main Accent Color", st.session_state['brand_color'])
+        
+        st.subheader("2. Upload Clinic Logo")
+        logo_file = st.file_uploader("Upload Clinic Logo (PNG, JPG)", type=['png', 'jpg', 'jpeg'])
+        
+        save_brand = st.form_submit_button("Apply Branding & Save Theme")
+        if save_brand:
+            st.session_state['brand_color'] = chosen_color
+            st.session_state['users'].loc[st.session_state['users']['Username'] == st.session_state['username'], 'Brand_Color'] = chosen_color
+            st.success("🎉 Clinic Branding and Color Theme updated successfully!")
+            st.rerun()
+
+# 9. SUPER ADMIN CONTROL
 elif menu == "👑 Super Admin: Global Plans & Subscriptions":
     st.header("👑 Super Admin Control")
     st.dataframe(st.session_state['subscriptions'], use_container_width=True)
 
-# 9. DOCTOR SETTINGS: FEATURE CONTROLS
+# 10. DOCTOR SETTINGS
 elif menu == "⚙️ Doctor Settings: Feature Controls":
     st.header("⚙️ Doctor Settings & Feature Controls")
-    st.markdown("Customize which features are active for your clinic.")
-    
     with st.form("doctor_settings_form"):
-        allow_f = st.checkbox("Allow Staff to View Financial Reports & Patient Debts", value=staff_can_view_finance)
-        enable_online_b = st.checkbox("Enable Online Patient Self-Booking Portal for My Clinic", value=online_booking_enabled)
+        allow_f = st.checkbox("Allow Staff to View Financial Reports", value=staff_can_view_finance)
+        enable_online_b = st.checkbox("Enable Online Patient Self-Booking Portal", value=online_booking_enabled)
         
         save_settings = st.form_submit_button("Save Clinic Settings")
         if save_settings:
             st.session_state['staff_finance'] = allow_f
             st.session_state['online_booking_enabled'] = enable_online_b
-            
-            # Update user dataframe
             st.session_state['users'].loc[st.session_state['users']['Username'] == st.session_state['username'], 'Staff_Can_View_Finance'] = allow_f
             st.session_state['users'].loc[st.session_state['users']['Username'] == st.session_state['username'], 'Enable_Online_Booking'] = enable_online_b
-            
             st.success("Settings updated successfully!")
             st.rerun()
