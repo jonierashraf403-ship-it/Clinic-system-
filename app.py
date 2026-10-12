@@ -3,7 +3,6 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 import urllib.parse
-import hashlib
 
 st.set_page_config(page_title="شامل - منصة إدارة العيادات", layout="wide", page_icon="🏥")
 
@@ -109,14 +108,6 @@ def init_db():
         ]
         cursor.executemany('INSERT INTO subscriptions VALUES (?, ?, ?, ?)', default_subs)
         
-        default_drugs = [
-            ('Main Branch', 'Amoxicillin 500mg', '1 capsule every 8 hours'),
-            ('Main Branch', 'Panadol Extra', '1 tablet when needed'),
-            ('Maadi Branch', 'Cataflam 50mg', '1 tablet after meals'),
-            ('Maadi Branch', 'Augmentin 1g', '1 tablet every 12 hours')
-        ]
-        cursor.executemany('INSERT INTO clinic_drugs (clinic, drug_name, default_dosage) VALUES (?, ?, ?)', default_drugs)
-        
     conn.commit()
     conn.close()
 
@@ -191,7 +182,9 @@ if not st.session_state['logged_in']:
     
     # 1. LOGIN
     if auth_mode == "Login":
-        st.subheader("🔐 Clinic Staff Login")
+        st.subheader("🔐 Clinic Staff & Super Admin Login")
+        st.info("💡 للتوجه للوحة التحكم كأدمن عام، استخدم Username: `admin` و Password: `admin123`")
+        
         with st.form("login_form"):
             username_input = st.text_input("Username")
             password_input = st.text_input("Password", type="password")
@@ -224,10 +217,10 @@ if not st.session_state['logged_in']:
                     st.session_state['staff_finance'] = bool(user_match.iloc[0]['staff_finance'])
                     st.session_state['online_booking_enabled'] = bool(user_match.iloc[0]['enable_booking'])
                     st.session_state['brand_color'] = user_match.iloc[0]['brand_color'] or '#007BFF'
-                    st.success("Login successful! Redirecting...")
+                    st.success(f"تم تسجيل الدخول بنجاح كـ ({role_val})! جاري التوجيه...")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials.")
+                    st.error("خطأ في اسم المستخدم أو كلمة المرور.")
 
     # 2. ONLINE PATIENT SELF-BOOKING PORTAL
     elif auth_mode == "Online Patient Self-Booking Portal":
@@ -293,14 +286,14 @@ if not st.session_state['logged_in']:
     elif auth_mode == "Reset Password":
         st.subheader("Reset Password")
         with st.form("reset_form"):
-            reset_username = st.text_input("Enter Username")
+            reset_username = st.text_input("Enter Username (e.g. admin)")
             new_pass1 = st.text_input("New Password", type="password")
             new_pass2 = st.text_input("Confirm Password", type="password")
             reset_btn = st.form_submit_button("Reset")
             if reset_btn and new_pass1 == new_pass2:
                 if reset_username in users_df['username'].values:
                     run_query("UPDATE users SET password = ? WHERE username = ?", (new_pass1, reset_username))
-                    st.success("Password updated successfully.")
+                    st.success("Password updated successfully. You can now login.")
                 else:
                     st.error("Username not found.")
                 
