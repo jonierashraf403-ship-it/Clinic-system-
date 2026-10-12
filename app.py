@@ -4,7 +4,6 @@ from datetime import datetime
 
 st.set_page_config(page_title="نظام إدارة العيادات", layout="wide")
 
-# محاكاة قاعدة بيانات باستخدام Session State في الذاكرة للنسخة التجريبية
 if 'patients' not in st.session_state:
     st.session_state['patients'] = pd.DataFrame(columns=[
         'Patient_ID', 'Clinic', 'Name', 'Phone', 'Medical_History', 'Dental_History', 'Notes', 'Total_Cost', 'Paid', 'Remaining'
@@ -17,10 +16,8 @@ if 'appointments' not in st.session_state:
 
 st.title("🏥 نظام إدارة العيادات المتكامل (نسخة تجريبية)")
 
-# القائمة الجانبية للتنقل بين الأقسام
 menu = st.sidebar.selectbox("اختر القسم", ["إدارة المواعيد", "ملفات المرضى والتاريخ المرضي", "إضافة مريض/جلسة جديدة", "التقارير المالية"])
 
-# 1. قسم إدارة المواعيد
 if menu == "إدارة المواعيد":
     st.header("📅 إدارة ومتابعة المواعيد")
     
@@ -46,7 +43,7 @@ if menu == "إدارة المواعيد":
                 'Procedure': [procedure]
             })
             st.session_state['appointments'] = pd.concat([st.session_state['appointments'], new_app], ignore_index=True)
-            st.success(f"تم حجز الموعد بنجاح للمريض: {patient_name}")
+            st.success(f"Appointment successfully booked for: {patient_name}")
 
     st.subheader("جدول المواعيد المسجلة")
     if not st.session_state['appointments'].empty:
@@ -54,7 +51,6 @@ if menu == "إدارة المواعيد":
     else:
         st.info("لا توجد مواعيد مسجلة حتى الآن.")
 
-# 2. قسم إضافة مريض وجلسة جديدة
 elif menu == "إضافة مريض/جلسة جديدة":
     st.header("➕ إضافة ملف مريض جديد وتسجيل جلسة")
     
@@ -93,9 +89,8 @@ elif menu == "إضافة مريض/جلسة جديدة":
                 'Remaining': [remaining]
             })
             st.session_state['patients'] = pd.concat([st.session_state['patients'], new_pat], ignore_index=True)
-            st.success( برقم الكود: f"تم حفظ ملف المريض بنجاح! {patient_id}")
+            st.success(f"Patient saved successfully with ID: {patient_id}")
 
-# 3. ملفات المرضى
 elif menu == "ملفات المرضى والتاريخ المرضي":
     st.header("🗂️ سجلات المرضى والبحث")
     if not st.session_state['patients'].empty:
@@ -107,7 +102,6 @@ elif menu == "ملفات المرضى والتاريخ المرضي":
     else:
         st.info("لم يتم تسجيل أي مرضى حتى الآن.")
 
-# 4. التقارير المالية
 elif menu == "التقارير المالية":
     st.header("💰 الملخص المالي والإيرادات")
     if not st.session_state['patients'].empty:
