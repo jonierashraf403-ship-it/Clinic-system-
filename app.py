@@ -2,9 +2,18 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Multi-Clinic Management System", layout="wide")
+st.set_page_config(page_title="SaaS Multi-Clinic Management System", layout="wide")
 
-# Initialize Session States
+# Initialize Global Session States for Multi-Clinic SaaS Simulation
+if 'users' not in st.session_state:
+    # Default initial admin/doctor accounts for testing
+    st.session_state['users'] = pd.DataFrame({
+        'Username': ['doctor_main', 'doctor_maadi', 'admin'],
+        'Password': ['1234', '1234', 'admin123'],
+        'Clinic': ['Main Branch', 'Maadi Branch', 'All Clinics'],
+        'Role': ['Doctor', 'Doctor', 'Super Admin']
+    })
+
 if 'patients' not in st.session_state:
     st.session_state['patients'] = pd.DataFrame(columns=[
         'Patient_ID', 'Clinic', 'Name', 'Phone', 'Medical_History', 'Dental_History', 'Notes', 'Total_Cost', 'Paid', 'Remaining'
@@ -15,7 +24,51 @@ if 'appointments' not in st.session_state:
         'Clinic', 'Patient_Name', 'Phone', 'Date', 'Time', 'Procedure'
     ])
 
-st.title("🏥 Multi-Clinic Management System")
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+    st.session_state['username'] = ""
+    st.session_state['clinic'] = ""
+    st.session_state['role'] = ""
+
+# --- LOGIN SCREEN ---
+if not st.session_state['logged_in']:
+    st.title("🔐 Multi-Clinic SaaS - Secure Login")
+    st.markdown("Please log in with your clinic credentials to access your dashboard.")
+    
+    with st.form("login_form"):
+        username_input = st.text_input("Username")
+        password_input = st.text_input("Password", type="password")
+        login_btn = st.form_submit_button("Login")
+        
+        if login_btn:
+            users_df = st.session_state['users']
+            user_match = users_df[(users_df['Username'] == username_input) & (users_df['Password'] == password_input)]
+            
+            if not user_match.empty:
+                st.session_state['logged_in'] = True
+                st.session_state['username'] = user_match.iloc[0]['Username']
+                st.session_state['clinic'] = user_match.iloc[0]['Clinic']
+                st.session_state['role'] = user_match.iloc[0]['Role']
+                st.success("Login successful! Loading dashboard...")
+                st.rerun()
+            else:
+                st.error("Invalid username or password. Try (doctor_main / 1234)")
+                
+    st.stop() # Stop execution here until logged in
+
+# --- MAIN APP (AFTER LOGIN) ---
+current_clinic = st.session_state['clinic']
+current_role = st.session_state['role']
+
+st.sidebar.markdown(f"👤 **Logged in as:** {st.session_state['username']}")
+st.sidebar.markdown(f"🏥 **Clinic:** {current_clinic}")
+st.sidebar.markdown(f"🛡️ **Role:** {current_role}")
+
+if st.sidebar.button("Log out"):
+    st.session_state['logged_in'] = False
+    st.rerun()
+
+st.title(f"🏥 Multi-Clinic Management System - [{current_clinic}]")
 
 # Sidebar Navigation
 menu = st.sidebar.selectbox("Navigation", [
@@ -30,15 +83,22 @@ menu = st.sidebar.selectbox("Navigation", [
 today = datetime.today().date()
 tomorrow = today + timedelta(days=1)
 
+# Helper function to filter data by clinic unless Super Admin
+def filter_by_clinic(df):
+    if current_role == "Super Admin" or current_clinic == "All Clinics":
+        return df
+    else:
+        return df[df['Clinic'] == current_clinic]
+
 # 1. TODAY'S APPOINTMENTS & REMINDERS
 if menu == "Today's Appointments & Reminders":
     st.header("📅 Today's Schedule & Tomorrow's Reminders")
     
+    appointments_df = filter_by_clinic(st.session_state['appointments'])
+    
     # Tomorrow's Reminder Banner
-    if not st.session_state['appointments'].empty:
-        tomorrow_apps = st.session_state['appointments'][
-            st.session_state['appointments']['Date'] == str(tomorrow)
-        ]
+    if not appointments_df.empty:
+        tomorrow_apps = appointments_df[appointments_df['Date'] == str(tomorrow)]
         if not tomorrow_apps.empty:
             st.warning(f"🔔 **Reminder:** You have {len(tomorrow_apps)} appointment(s) scheduled for TOMORROW ({tomorrow})!")
             with st.expander("View Tomorrow's Reminders List"):
@@ -49,10 +109,8 @@ if menu == "Today's Appointments & Reminders":
     st.markdown("---")
     st.subheader(f"📌 Today's Appointments ({today})")
     
-    if not st.session_state['appointments'].empty:
-        today_apps = st.session_state['appointments'][
-            st.session_state['appointments']['Date'] == str(today)
-        ]
+    if not appointments_df.empty:
+        today_apps = appointments_df[appointments_df['Date'] == str(today)]
         if not today_apps.empty:
             st.dataframe(today_apps, use_container_width=True)
         else:
@@ -67,7 +125,12 @@ elif menu == "Book New Appointment":
     with st.form("appointment_form"):
         col1, col2 = st.columns(2)
         with col1:
-            clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
+            if current_role == "Super Admin":
+                clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
+            else:
+                clinic = current_clinic # Locked to logged-in clinic
+                st.info(f"Booking for Clinic: **{clinic}**")
+                
             patient_name = st.text_input("Patient Full Name")
             phone = st.text_input("Phone Number")
         with col2:
@@ -93,11 +156,10 @@ elif menu == "All Appointments (By Date)":
     st.header("📆 Appointments Filter by Date")
     
     selected_date = st.date_input("Select Date to View Schedule", today)
+    appointments_df = filter_by_clinic(st.session_state['appointments'])
     
-    if not st.session_state['appointments'].empty:
-        filtered_apps = st.session_state['appointments'][
-            st.session_state['appointments']['Date'] == str(selected_date)
-        ]
+    if not appointments_df.empty:
+        filtered_apps = appointments_df[appointments_df['Date'] == str(selected_date)]
         st.subheader(f"Appointments for {selected_date}")
         if not filtered_apps.empty:
             st.dataframe(filtered_apps, use_container_width=True)
@@ -111,7 +173,12 @@ elif menu == "Add New Patient / Session":
     st.header("➕ Add Patient Record & Session Details")
     
     with st.form("patient_form"):
-        clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
+        if current_role == "Super Admin":
+            clinic = st.selectbox("Clinic Branch", ["Main Branch", "Maadi Branch", "Tagamoa Branch"])
+        else:
+            clinic = current_clinic
+            st.info(f"Adding record to Clinic: **{clinic}**")
+            
         name = st.text_input("Patient Full Name")
         phone = st.text_input("Phone Number")
         
@@ -150,23 +217,25 @@ elif menu == "Add New Patient / Session":
 # 5. PATIENT RECORDS & HISTORY
 elif menu == "Patient Records & History":
     st.header("🗂️ Patient Database & Search")
-    if not st.session_state['patients'].empty:
+    patients_df = filter_by_clinic(st.session_state['patients'])
+    
+    if not patients_df.empty:
         search_query = st.text_input("Search by Name or Phone:")
-        df = st.session_state['patients']
+        df = patients_df
         if search_query:
             df = df[df['Name'].str.contains(search_query, case=False, na=False) | df['Phone'].str.contains(search_query, na=False)]
         st.dataframe(df, use_container_width=True)
     else:
-        st.info("No patient records available.")
+        st.info("No patient records available for this clinic.")
 
 # 6. FINANCIAL REPORTS & DEBTS TRACKING
 elif menu == "Financial Reports & Debts Tracking":
     st.header("💰 Financial Summary & Outstanding Balances")
+    patients_df = filter_by_clinic(st.session_state['patients'])
     
-    if not st.session_state['patients'].empty:
-        df = st.session_state['patients']
-        total_revenue = df['Paid'].sum()
-        total_remaining = df['Remaining'].sum()
+    if not patients_df.empty:
+        total_revenue = patients_df['Paid'].sum()
+        total_remaining = patients_df['Remaining'].sum()
         
         # Summary Cards
         col1, col2 = st.columns(2)
@@ -180,7 +249,7 @@ elif menu == "Financial Reports & Debts Tracking":
         search_name = st.text_input("Enter Patient Name or Phone Number to check balance:")
         
         if search_name:
-            filtered_df = df[df['Name'].str.contains(search_name, case=False, na=False) | df['Phone'].str.contains(search_name, na=False)]
+            filtered_df = patients_df[patients_df['Name'].str.contains(search_name, case=False, na=False) | patients_df['Phone'].str.contains(search_name, na=False)]
             if not filtered_df.empty:
                 for idx, row in filtered_df.iterrows():
                     st.write(f"### 👤 Patient: **{row['Name']}** ({row['Phone']}) - {row['Clinic']}")
@@ -193,12 +262,12 @@ elif menu == "Financial Reports & Debts Tracking":
                 st.warning("No matching patient found.")
         
         st.subheader("📋 List of Patients with Remaining Balance (Debts)")
-        debtors_df = df[df['Remaining'] > 0][['Patient_ID', 'Name', 'Phone', 'Clinic', 'Total_Cost', 'Paid', 'Remaining']]
+        debtors_df = patients_df[patients_df['Remaining'] > 0][['Patient_ID', 'Name', 'Phone', 'Clinic', 'Total_Cost', 'Paid', 'Remaining']]
         
         if not debtors_df.empty:
             st.dataframe(debtors_df, use_container_width=True)
         else:
-            st.success("🎉 Excellent! There are no unpaid balances across all patients.")
+            st.success("🎉 Excellent! There are no unpaid balances.")
             
     else:
-        st.info("No financial data or patient records available yet.")
+        st.info("No financial data available yet.")
