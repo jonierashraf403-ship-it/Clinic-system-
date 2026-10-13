@@ -8,7 +8,7 @@ st.set_page_config(page_title="شامل - منصة إدارة العيادات",
 
 today = datetime.today().date()
 
-# --- DATABASE SETUP & CONNECTION ---
+# --- DATABASE SETUP & CONNECTION (PRODUCTION READY - NO DUMMY DATA) ---
 def init_db():
     conn = sqlite3.connect('shamel_clinics.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -47,7 +47,7 @@ def init_db():
         )
     ''')
     
-    # Patients Table
+    # Patients Table (Clean & Empty for Real Data)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS patients (
             patient_id TEXT PRIMARY KEY,
@@ -65,7 +65,7 @@ def init_db():
         )
     ''')
     
-    # Appointments Table
+    # Appointments Table (Clean & Empty for Real Data)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS appointments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +78,7 @@ def init_db():
         )
     ''')
     
-    # Expenses Table
+    # Expenses Table (Clean & Empty for Real Data)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,26 +92,11 @@ def init_db():
         )
     ''')
     
-    # Insert Super Admin & Default Doctors
-    default_users = [
-        ('doctor_main', '1234', 'Main Branch', 'Doctor', 0, 1, '#007BFF', ''),
-        ('doctor_maadi', '1234', 'Maadi Branch', 'Doctor', 0, 1, '#28A745', ''),
-        ('jony ashraf', 'jony 7890', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', '')
-    ]
-    for user in default_users:
-        cursor.execute('''
-            INSERT OR IGNORE INTO users (username, password, clinic, role, staff_finance, enable_booking, brand_color, logo_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', user)
-    
-    # Seed Initial Subscriptions if empty
-    cursor.execute('SELECT COUNT(*) FROM subscriptions')
-    if cursor.fetchone()[0] == 0:
-        default_subs = [
-            ('Main Branch', '1 Month', 'Active', str(today + timedelta(days=30))),
-            ('Maadi Branch', '3 Months', 'Active', str(today + timedelta(days=90)))
-        ]
-        cursor.executemany('INSERT INTO subscriptions VALUES (?, ?, ?, ?)', default_subs)
+    # Ensure Super Admin Account Exists
+    cursor.execute('''
+        INSERT OR IGNORE INTO users (username, password, clinic, role, staff_finance, enable_booking, brand_color, logo_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', ('jony ashraf', 'jony 7890', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', ''))
         
     conn.commit()
     conn.close()
