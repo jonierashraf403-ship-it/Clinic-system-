@@ -4,11 +4,11 @@ import sqlite3
 from datetime import datetime, timedelta
 import urllib.parse
 
-st.set_page_config(page_title="شامل - منصة إدارة العيادات", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="Shamel - Global Clinic Management Platform", layout="wide", page_icon="🏥")
 
 today = datetime.today().date()
 
-# --- DATABASE SETUP & CONNECTION (PRODUCTION READY - NO DUMMY DATA) ---
+# --- DATABASE SETUP & CONNECTION ---
 def init_db():
     conn = sqlite3.connect('shamel_clinics.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -47,7 +47,7 @@ def init_db():
         )
     ''')
     
-    # Patients Table (Clean & Empty for Real Data)
+    # Patients Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS patients (
             patient_id TEXT PRIMARY KEY,
@@ -65,7 +65,7 @@ def init_db():
         )
     ''')
     
-    # Appointments Table (Clean & Empty for Real Data)
+    # Appointments Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS appointments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +78,7 @@ def init_db():
         )
     ''')
     
-    # Expenses Table (Clean & Empty for Real Data)
+    # Expenses Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,11 +92,11 @@ def init_db():
         )
     ''')
     
-    # Ensure Super Admin Account Exists
+    # Ensure Super Admin Account Exists with New Credentials
     cursor.execute('''
-        INSERT OR IGNORE INTO users (username, password, clinic, role, staff_finance, enable_booking, brand_color, logo_url)
+        INSERT OR REPLACE INTO users (username, password, clinic, role, staff_finance, enable_booking, brand_color, logo_url)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', ('jony ashraf', 'jony 7890', 'All Clinics', 'Super Admin', 1, 1, '#17A2B8', ''))
+    ''', ('Jonier Ashraf', 'anton 7890$#@', 'All Clinics', 'Super Admin', 1, 1, '#007BFF', ''))
         
     conn.commit()
     conn.close()
@@ -116,7 +116,7 @@ def run_query(query, params=(), fetch=False):
         conn.commit()
         conn.close()
 
-# Initialize Session State Variables for Login State
+# Initialize Session State Variables
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
     st.session_state['username'] = ""
@@ -152,7 +152,7 @@ if st.session_state['logged_in']:
 
 # --- AUTHENTICATION & PORTAL ---
 if not st.session_state['logged_in']:
-    st.title("🏥 شامل - منصة إدارة العيادات")
+    st.title("🏥 Shamel - Global Clinic Management SaaS")
     
     users_df = run_query("SELECT * FROM users", fetch=True)
     pricing_plans = {
@@ -172,7 +172,7 @@ if not st.session_state['logged_in']:
     
     # 1. LOGIN
     if auth_mode == "Login":
-        st.subheader("🔐 Clinic Staff & Super Admin Login")
+        st.subheader("🔐 Staff & Super Admin Login")
         with st.form("login_form"):
             username_input = st.text_input("Username")
             password_input = st.text_input("Password", type="password")
@@ -205,10 +205,10 @@ if not st.session_state['logged_in']:
                     st.session_state['staff_finance'] = bool(user_match.iloc[0]['staff_finance'])
                     st.session_state['online_booking_enabled'] = bool(user_match.iloc[0]['enable_booking'])
                     st.session_state['brand_color'] = user_match.iloc[0]['brand_color'] or '#007BFF'
-                    st.success("تم تسجيل الدخول بنجاح! جاري التوجيه...")
+                    st.success("Login successful! Redirecting...")
                     st.rerun()
                 else:
-                    st.error("خطأ في اسم المستخدم أو كلمة المرور.")
+                    st.error("Invalid username or password.")
 
     # 2. ONLINE PATIENT SELF-BOOKING PORTAL
     elif auth_mode == "Online Patient Self-Booking Portal":
@@ -237,8 +237,8 @@ if not st.session_state['logged_in']:
 
     # 3. REGISTER & ONLINE PAYMENT GATEWAY
     elif auth_mode == "Register New Clinic & Subscription":
-        st.subheader("💳 Register & Online Payment Gateway")
-        st.info(f"📦 Subscription Plans ({st.session_state['currency']}):")
+        st.subheader("💳 Global Registration & Online Payment Gateway")
+        st.info(f"📦 SaaS Subscription Plans ({st.session_state['currency']}):")
         plans_df = pd.DataFrame(list(pricing_plans.items()), columns=['Plan Duration', f'Price ({st.session_state["currency"]})'])
         st.table(plans_df)
         
@@ -302,7 +302,7 @@ if st.sidebar.button("Log out"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-st.title(f"🏥 شامل - [{current_clinic}]")
+st.title(f"🏥 Shamel - [{current_clinic}]")
 
 menu_options = [
     "Today's Appointments & WhatsApp Reminders",
@@ -535,7 +535,7 @@ elif menu == "🎨 Clinic Branding & Custom Theme (White-Label)":
 
 # 9. SUPER ADMIN CONTROL
 elif menu == "👑 Super Admin: Global Plans & Subscriptions":
-    st.header("👑 Super Admin Control")
+    st.header("👑 Super Admin Global Control")
     subs_df = run_query("SELECT * FROM subscriptions", fetch=True)
     st.dataframe(subs_df, use_container_width=True)
 
